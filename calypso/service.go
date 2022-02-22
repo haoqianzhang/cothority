@@ -63,7 +63,7 @@ var calypsoID onet.ServiceID
 const ServiceName = "Calypso"
 
 // dkgTimeout is how long the system waits for the DKG to finish
-const propagationTimeout = 20 * time.Second
+const propagationTimeout = 2000 * time.Second
 
 const calypsoReshareProto = "calypso_reshare_proto"
 
