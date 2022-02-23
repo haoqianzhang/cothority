@@ -125,7 +125,8 @@ type updateValidPeersReply struct {
 // in byzcoin Client.
 type DecryptKey struct {
 	// Read is the proof that he has been accepted to read the secret.
-	Read byzcoin.Proof
+	//Read byzcoin.Proof
+	ReadKey kyber.Point
 	// Write is the proof containing the write request.
 	Write byzcoin.Proof
 }

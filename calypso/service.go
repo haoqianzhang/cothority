@@ -532,18 +532,18 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	reply = &DecryptKeyReply{}
 	log.Lvl2(s.ServerIdentity(), "Re-encrypt the key to the public key of the reader")
 
-	var read Read
-	if err := dkr.Read.VerifyAndDecode(cothority.Suite, ContractReadID, &read); err != nil {
-		return nil, xerrors.New("didn't get a read instance: " + err.Error())
-	}
+	// var read Read
+	// if err := dkr.Read.VerifyAndDecode(cothority.Suite, ContractReadID, &read); err != nil {
+	// 	return nil, xerrors.New("didn't get a read instance: " + err.Error())
+	// }
 
 	var write Write
 	if err := dkr.Write.VerifyAndDecode(cothority.Suite, ContractWriteID, &write); err != nil {
 		return nil, xerrors.New("didn't get a write instance: " + err.Error())
 	}
-	if !read.Write.Equal(byzcoin.NewInstanceID(dkr.Write.InclusionProof.Key())) {
-		return nil, xerrors.New("read doesn't point to passed write")
-	}
+	// if !read.Write.Equal(byzcoin.NewInstanceID(dkr.Write.InclusionProof.Key())) {
+	// 	return nil, xerrors.New("read doesn't point to passed write")
+	// }
 	s.storage.Lock()
 	id := write.LTSID
 	roster := s.storage.Rosters[id]
@@ -554,11 +554,11 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	}
 	s.storage.Unlock()
 
-	if err = s.verifyProof(&dkr.Read); err != nil {
-		return nil, xerrors.Errorf(
-			"read proof cannot be verified to come from scID: %v",
-			err)
-	}
+	// if err = s.verifyProof(&dkr.Read); err != nil {
+	// 	return nil, xerrors.Errorf(
+	// 		"read proof cannot be verified to come from scID: %v",
+	// 		err)
+	// }
 	if err = s.verifyProof(&dkr.Write); err != nil {
 		return nil, xerrors.Errorf(
 			"write proof cannot be verified to come from scID: %v",
@@ -576,16 +576,17 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	}
 	ocsProto := pi.(*protocol.OCS)
 	ocsProto.U = write.U
-	verificationData := &vData{
-		Proof: dkr.Read,
-	}
-	ocsProto.Xc = read.Xc
+	// verificationData := &vData{
+	// 	Proof: dkr.Read,
+	// }
+	//ocsProto.Xc = read.Xc
+	ocsProto.Xc = dkr.ReadKey
 	log.Lvlf2("%v Public key is: %s", s.ServerIdentity(), ocsProto.Xc)
-	ocsProto.VerificationData, err = protobuf.Encode(verificationData)
-	if err != nil {
-		return nil,
-			xerrors.Errorf("couldn't marshal verification data: %v", err)
-	}
+	// ocsProto.VerificationData, err = protobuf.Encode(verificationData)
+	// if err != nil {
+	// 	return nil,
+	// 		xerrors.Errorf("couldn't marshal verification data: %v", err)
+	// }
 
 	// Make sure everything used from the s.Storage structure is copied, so
 	// there will be no races.
@@ -827,36 +828,36 @@ func pointInList(p1 kyber.Point, l []kyber.Point) bool {
 
 // verifyReencryption checks that the read and the write instances match.
 func (s *Service) verifyReencryption(rc *protocol.Reencrypt) bool {
-	err := func() error {
-		var verificationData vData
-		err := protobuf.DecodeWithConstructors(*rc.VerificationData, &verificationData, network.DefaultConstructors(cothority.Suite))
-		if err != nil {
-			return xerrors.Errorf("decoding verification data: %v", err)
-		}
-		_, v0, contractID, _, err := verificationData.Proof.KeyValue()
-		if err != nil {
-			return xerrors.Errorf("proof cannot return values: %v", err)
-		}
-		if contractID != ContractReadID {
-			return xerrors.New("proof doesn't point to read instance")
-		}
-		var r Read
-		err = protobuf.DecodeWithConstructors(v0, &r, network.DefaultConstructors(cothority.Suite))
-		if err != nil {
-			return xerrors.Errorf("couldn't decode read data: %v", err)
-		}
-		if verificationData.Ephemeral != nil {
-			return xerrors.New("ephemeral keys not supported yet")
-		}
-		if !r.Xc.Equal(rc.Xc) {
-			return xerrors.New("wrong reader")
-		}
-		return nil
-	}()
-	if err != nil {
-		log.Lvl2(s.ServerIdentity(), "wrong reencryption:", err)
-		return false
-	}
+	// err := func() error {
+	// 	var verificationData vData
+	// 	err := protobuf.DecodeWithConstructors(*rc.VerificationData, &verificationData, network.DefaultConstructors(cothority.Suite))
+	// 	if err != nil {
+	// 		return xerrors.Errorf("decoding verification data: %v", err)
+	// 	}
+	// 	_, v0, contractID, _, err := verificationData.Proof.KeyValue()
+	// 	if err != nil {
+	// 		return xerrors.Errorf("proof cannot return values: %v", err)
+	// 	}
+	// 	if contractID != ContractReadID {
+	// 		return xerrors.New("proof doesn't point to read instance")
+	// 	}
+	// 	var r Read
+	// 	err = protobuf.DecodeWithConstructors(v0, &r, network.DefaultConstructors(cothority.Suite))
+	// 	if err != nil {
+	// 		return xerrors.Errorf("couldn't decode read data: %v", err)
+	// 	}
+	// 	if verificationData.Ephemeral != nil {
+	// 		return xerrors.New("ephemeral keys not supported yet")
+	// 	}
+	// 	if !r.Xc.Equal(rc.Xc) {
+	// 		return xerrors.New("wrong reader")
+	// 	}
+	// 	return nil
+	// }()
+	// if err != nil {
+	// 	log.Lvl2(s.ServerIdentity(), "wrong reencryption:", err)
+	// 	return false
+	// }
 	return true
 }
 
