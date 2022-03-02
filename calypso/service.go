@@ -601,7 +601,7 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	ocsProto.Poly = share.NewPubPoly(s.Suite(), pp.B.Clone(), commits)
 	s.storage.Unlock()
 
-	log.Lvl3("Starting reencryption protocol")
+	log.Lvl2("Starting reencryption protocol")
 	err = ocsProto.SetConfig(&onet.GenericConfig{Data: id.Slice()})
 	if err != nil {
 		return nil,
@@ -614,14 +614,14 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	if !<-ocsProto.Reencrypted {
 		return nil, xerrors.New("reencryption got refused")
 	}
-	log.Lvl3("Reencryption protocol is done.")
+	log.Lvl2("Reencryption protocol is done.")
 	reply.XhatEnc, err = share.RecoverCommit(cothority.Suite, ocsProto.Uis,
 		threshold, nodes)
 	if err != nil {
 		return nil, xerrors.Errorf("failed to recover commit: %v", err)
 	}
 	reply.C = write.C
-	log.Lvl3("Successfully reencrypted the key")
+	log.Lvl2("Successfully reencrypted the key")
 	return
 }
 
