@@ -190,6 +190,60 @@ func (c *Client) AddWrite(write *Write, signer darc.Signer, signerCtr uint64,
 	return reply, err
 }
 
+func (c *Client) AddBatchWrite(write []*Write, num int, signer darc.Signer,
+	darc darc.Darc, wait int) (reply []WriteReply, err error) {
+	count := uint64(1)
+	//reply = &WriteReply{}
+	replys := make([]WriteReply, num)
+	writeBuf := make([][]byte, num)
+	for i := 0; i < num; i++ {
+		writeBuf[i], err = protobuf.Encode(write[i])
+		if err != nil {
+			return nil, xerrors.Errorf("encoding Write message: %v", err)
+		}
+	}
+	instructions := make([]byzcoin.Instruction, num)
+	for i := 0; i < num; i++ {
+		instructions[i] = byzcoin.Instruction{
+			InstanceID: byzcoin.NewInstanceID(darc.GetBaseID()),
+			Spawn: &byzcoin.Spawn{
+				ContractID: ContractWriteID,
+				Args: byzcoin.Arguments{{
+					Name: "write", Value: writeBuf[i]}},
+			},
+			SignerCounter: []uint64{count},
+		}
+		count++
+	}
+	ctx := byzcoin.NewClientTransaction(byzcoin.CurrentVersion, instructions...)
+
+	// ctx := byzcoin.NewClientTransaction(byzcoin.CurrentVersion,
+	// 	byzcoin.Instruction{
+	// 		InstanceID: byzcoin.NewInstanceID(darc.GetBaseID()),
+	// 		Spawn: &byzcoin.Spawn{
+	// 			ContractID: ContractWriteID,
+	// 			Args: byzcoin.Arguments{{
+	// 				Name: "write", Value: writeBuf[0]}},
+	// 		},
+	// 		SignerCounter: []uint64{signerCtr},
+	// 	},
+	// )
+	//Sign the transaction
+	err = ctx.FillSignersAndSignWith(signer)
+	if err != nil {
+		return nil, xerrors.Errorf("signing txn: %v", err)
+	}
+	for i := 0; i < num; i++ {
+		replys[i].InstanceID = ctx.Instructions[i].DeriveID("")
+		//Delegate the work to the byzcoin client
+		replys[i].AddTxResponse, err = c.bcClient.AddTransactionAndWait(ctx, wait)
+		if err != nil {
+			return nil, xerrors.Errorf("adding txn: %v", err)
+		}
+	}
+	return replys, err
+}
+
 // AddRead creates a Read Instance by adding a transaction on the byzcoin client.
 //
 // Input:

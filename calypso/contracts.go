@@ -75,10 +75,10 @@ func (c ContractWrite) Spawn(rst byzcoin.ReadOnlyStateTrie, inst byzcoin.Instruc
 		if d := inst.Spawn.Args.Search("darcID"); d != nil {
 			darcID = d
 		}
-		if err = c.Write.CheckProof(cothority.Suite, darcID); err != nil {
-			err = xerrors.Errorf("proof of write failed: %v", err)
-			return
-		}
+		// if err = c.Write.CheckProof(cothority.Suite, darcID); err != nil {
+		// 	err = xerrors.Errorf("proof of write failed: %v", err)
+		// 	return
+		// }
 		instID, err := inst.DeriveIDArg("", "preID")
 		if err != nil {
 			return nil, nil, xerrors.Errorf(
