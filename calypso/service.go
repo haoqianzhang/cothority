@@ -625,6 +625,129 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	return
 }
 
+func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchReply, err error) {
+	log.Lvl2(s.ServerIdentity(), "Re-encrypt the key to the public key of the reader")
+	var roster *onet.Roster
+	var id byzcoin.InstanceID
+
+	num := len(dkr.Write)
+	write := make([]Write, num)
+	reply = &DecryptKeyBatchReply{}
+	reply.C = make([]kyber.Point, num)
+	reply.X = make([]kyber.Point, num)
+	reply.XhatEnc = make([]kyber.Point, num)
+
+	// var read Read
+	// if err := dkr.Read.VerifyAndDecode(cothority.Suite, ContractReadID, &read); err != nil {
+	// 	return nil, xerrors.New("didn't get a read instance: " + err.Error())
+	// }
+
+	for i := 0; i < num; i++ {
+		if err := dkr.Write[i].VerifyAndDecode(cothority.Suite, ContractWriteID, &write[i]); err != nil {
+			return nil, xerrors.New("didn't get a write instance: " + err.Error())
+		}
+		// if !read.Write.Equal(byzcoin.NewInstanceID(dkr.Write.InclusionProof.Key())) {
+		// 	return nil, xerrors.New("read doesn't point to passed write")
+		// }
+		s.storage.Lock()
+		id = write[i].LTSID
+		roster = s.storage.Rosters[id]
+		if roster == nil {
+			s.storage.Unlock()
+			return nil,
+				xerrors.Errorf("don't know the LTSID '%v' stored in write", id)
+		}
+		s.storage.Unlock()
+
+		// if err = s.verifyProof(&dkr.Read); err != nil {
+		// 	return nil, xerrors.Errorf(
+		// 		"read proof cannot be verified to come from scID: %v",
+		// 		err)
+		// }
+		if err = s.verifyProof(&dkr.Write[i]); err != nil {
+			return nil, xerrors.Errorf(
+				"write proof cannot be verified to come from scID: %v",
+				err)
+		}
+	}
+
+	// Start ocs-protocol to re-encrypt the file's symmetric key under the
+	// reader's public key.
+	nodes := len(roster.List)
+	threshold := nodes - (nodes-1)/3
+	tree := roster.GenerateNaryTreeWithRoot(nodes, s.ServerIdentity())
+	pi, err := s.CreateProtocol(protocol.NameOCSBatch, tree)
+	if err != nil {
+		return nil, xerrors.Errorf("failed to create ocs-protocol: %v", err)
+	}
+	ocsProto := pi.(*protocol.OCSBatch)
+	ocsProto.U = make([]kyber.Point, num)
+	ocsProto.Xc = make([]kyber.Point, num)
+	ocsProto.Uis = make(map[int][]*share.PubShare)
+
+	for i := 0; i < num; i++ {
+		ocsProto.U[i] = write[i].U
+		// verificationData := &vData{
+		// 	Proof: dkr.Read,
+		// }
+		//ocsProto.Xc = read.Xc
+		ocsProto.Xc[i] = dkr.ReadKey
+		log.Lvlf2("%v Public key is: %s", s.ServerIdentity(), ocsProto.Xc[i])
+
+		// ocsProto.VerificationData, err = protobuf.Encode(verificationData)
+		// if err != nil {
+		// 	return nil,
+		// 		xerrors.Errorf("couldn't marshal verification data: %v", err)
+		// }
+
+		// Make sure everything used from the s.Storage structure is copied, so
+		// there will be no races.
+		s.storage.Lock()
+		ocsProto.Shared = s.storage.Shared[id]
+		pp := s.storage.Polys[id]
+		reply.X[i] = s.storage.Shared[id].X.Clone()
+		var commits []kyber.Point
+		for _, c := range pp.Commits {
+			commits = append(commits, c.Clone())
+		}
+		ocsProto.Poly = share.NewPubPoly(s.Suite(), pp.B.Clone(), commits)
+		s.storage.Unlock()
+	}
+
+	log.Lvl2("Starting reencryption protocol")
+	err = ocsProto.SetConfig(&onet.GenericConfig{Data: id.Slice()})
+	if err != nil {
+		return nil,
+			xerrors.Errorf("failed to set config for ocs-protocol: %v", err)
+	}
+	err = ocsProto.Start()
+	if err != nil {
+		return nil, xerrors.Errorf("failed to start ocs-protocol: %v", err)
+	}
+	if !<-ocsProto.Reencrypted {
+		return nil, xerrors.New("reencryption got refused")
+	}
+	log.Lvl2("Reencryption protocol is done.")
+
+	for idx, uis := range ocsProto.Uis {
+		xhatEnc, err := share.RecoverCommit(cothority.Suite, uis, threshold, nodes)
+		if err != nil {
+			log.Errorf("Failed to recover commit %d: %v", idx, err)
+		} else {
+			reply.XhatEnc[idx] = xhatEnc
+		}
+		reply.C[idx] = write[idx].C
+	}
+
+	// reply.XhatEnc, err = share.RecoverCommit(cothority.Suite, ocsProto.Uis,
+	// 	threshold, nodes)
+	// if err != nil {
+	// 	return nil, xerrors.Errorf("failed to recover commit: %v", err)
+	// }
+	log.Lvl2("Successfully reencrypted the key")
+	return
+}
+
 // GetLTSReply returns the CreateLTSReply message of a previous LTS.
 func (s *Service) GetLTSReply(req *GetLTSReply) (*CreateLTSReply, error) {
 	log.Lvlf2("Getting LTS Reply for ID: %v", req.LTSID)
@@ -813,6 +936,23 @@ func (s *Service) NewProtocol(tn *onet.TreeNodeInstance, conf *onet.GenericConfi
 		ocs.Shared = shared
 		ocs.Verify = s.verifyReencryption
 		return ocs, nil
+	case protocol.NameOCSBatch:
+		id := byzcoin.NewInstanceID(conf.Data)
+		s.storage.Lock()
+		shared, ok := s.storage.Shared[id]
+		shared = shared.Clone()
+		s.storage.Unlock()
+		if !ok {
+			return nil, fmt.Errorf("didn't find LTSID %v", id)
+		}
+		pi, err := protocol.NewOCSBatch(tn)
+		if err != nil {
+			return nil, xerrors.Errorf("creating OCS protocol instance: %v", err)
+		}
+		ocs := pi.(*protocol.OCSBatch)
+		ocs.Shared = shared
+		ocs.Verify = s.verifyReencryptionBatch
+		return ocs, nil
 	}
 	return nil, nil
 }
@@ -861,6 +1001,10 @@ func (s *Service) verifyReencryption(rc *protocol.Reencrypt) bool {
 	return true
 }
 
+func (s *Service) verifyReencryptionBatch(rc *protocol.ReencryptBatch) bool {
+	return true
+}
+
 // newService receives the context that holds information about the node it's
 // running on. Saving and loading can be done using the context. The data will
 // be stored in memory for tests and simulations, and on disk for real deployments.
@@ -869,7 +1013,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 		ServiceProcessor: onet.NewServiceProcessor(c),
 		genesisBlocks:    make(map[string]*skipchain.SkipBlock),
 	}
-	if err := s.RegisterHandlers(s.CreateLTS, s.ReshareLTS, s.DecryptKey,
+	if err := s.RegisterHandlers(s.CreateLTS, s.ReshareLTS, s.DecryptKey, s.DecryptKeyBatch,
 		s.GetLTSReply, s.Authorise, s.Authorize, s.updateValidPeers); err != nil {
 		return nil, xerrors.New("couldn't register messages")
 	}

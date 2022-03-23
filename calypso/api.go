@@ -2,6 +2,7 @@ package calypso
 
 import (
 	"encoding/binary"
+	"log"
 	"time"
 
 	"go.dedis.ch/kyber/v3/sign/schnorr"
@@ -139,6 +140,12 @@ func (c *Client) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error)
 	reply = &DecryptKeyReply{}
 	err = c.c.SendProtobuf(c.bcClient.Roster.List[0], dkr, reply)
 	return reply, cothority.ErrorOrNil(err, "sending DecryptKey message")
+}
+
+func (c *Client) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchReply, err error) {
+	reply = &DecryptKeyBatchReply{}
+	err = c.c.SendProtobuf(c.bcClient.Roster.List[0], dkr, reply)
+	return reply, cothority.ErrorOrNil(err, "sending DecryptKeyBatch message")
 }
 
 // WaitProof calls the byzcoin client's wait proof
@@ -355,6 +362,26 @@ func (r *DecryptKeyReply) RecoverKey(xc kyber.Scalar) (key []byte, err error) {
 	key, err = XhatInv.Data()
 	if err != nil {
 		err = xerrors.Errorf("extracting data from point: %v", err)
+	}
+	return
+}
+
+func (r *DecryptKeyBatchReply) RecoverKey(xc kyber.Scalar) (keys [][]byte, err error) {
+	num := len(r.XhatEnc)
+	log.Println(num)
+	keys = make([][]byte, num)
+	for i := 0; i < num; i++ {
+		xcInv := xc.Clone().Neg(xc)
+		XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
+		Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
+		XhatInv := Xhat.Clone().Neg(Xhat)
+
+		// Decrypt r.C to keyPointHat
+		XhatInv.Add(r.C[i], XhatInv)
+		keys[i], err = XhatInv.Data()
+		if err != nil {
+			err = xerrors.Errorf("extracting data from point: %v", err)
+		}
 	}
 	return
 }

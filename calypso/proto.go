@@ -131,6 +131,14 @@ type DecryptKey struct {
 	Write byzcoin.Proof
 }
 
+type DecryptKeyBatch struct {
+	// Read is the proof that he has been accepted to read the secret.
+	//Read byzcoin.Proof
+	ReadKey kyber.Point
+	// Write is the proof containing the write request.
+	Write []byzcoin.Proof
+}
+
 // DecryptKeyReply is returned if the service verified successfully that the
 // decryption request is valid.
 type DecryptKeyReply struct {
@@ -140,6 +148,15 @@ type DecryptKeyReply struct {
 	XhatEnc kyber.Point
 	// X is the aggregate public key of the LTS used.
 	X kyber.Point
+}
+
+type DecryptKeyBatchReply struct {
+	// C is the secret re-encrypted under the reader's public key.
+	C []kyber.Point
+	// XhatEnc is the random part of the encryption.
+	XhatEnc []kyber.Point
+	// X is the aggregate public key of the LTS used.
+	X []kyber.Point
 }
 
 // GetLTSReply asks for the shared public key of the corresponding LTSID
