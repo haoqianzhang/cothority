@@ -683,7 +683,7 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 	ocsProto := pi.(*protocol.OCSBatch)
 	ocsProto.U = make([]kyber.Point, num)
 	ocsProto.Xc = make([]kyber.Point, num)
-	ocsProto.Uis = make(map[int][]*share.PubShare)
+	ocsProto.Uis = make([][]*share.PubShare, num)
 
 	for i := 0; i < num; i++ {
 		ocsProto.U[i] = write[i].U

@@ -2,7 +2,7 @@ package calypso
 
 import (
 	"encoding/binary"
-	"log"
+	"sync"
 	"time"
 
 	"go.dedis.ch/kyber/v3/sign/schnorr"
@@ -366,22 +366,65 @@ func (r *DecryptKeyReply) RecoverKey(xc kyber.Scalar) (key []byte, err error) {
 	return
 }
 
+type job struct {
+	index int
+}
+
+var wg sync.WaitGroup
+
+func worker(jobChan <-chan job, xc kyber.Scalar, keys [][]byte, r *DecryptKeyBatchReply) {
+	defer wg.Done()
+	for j := range jobChan {
+		process(j, xc, keys, r)
+	}
+}
+
+func process(j job, xc kyber.Scalar, keys [][]byte, r *DecryptKeyBatchReply) {
+	i := j.index
+	xcInv := xc.Clone().Neg(xc)
+	XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
+	Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
+	XhatInv := Xhat.Clone().Neg(Xhat)
+
+	// Decrypt r.C to keyPointHat
+	XhatInv.Add(r.C[i], XhatInv)
+	keys[i], _ = XhatInv.Data()
+	// if err != nil {
+	// 	err = xerrors.Errorf("extracting data from point: %v", err)
+	// }
+}
+
 func (r *DecryptKeyBatchReply) RecoverKey(xc kyber.Scalar) (keys [][]byte, err error) {
 	num := len(r.XhatEnc)
-	log.Println(num)
 	keys = make([][]byte, num)
-	for i := 0; i < num; i++ {
-		xcInv := xc.Clone().Neg(xc)
-		XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
-		Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
-		XhatInv := Xhat.Clone().Neg(Xhat)
+	// for i := 0; i < num; i++ {
+	// 	xcInv := xc.Clone().Neg(xc)
+	// 	XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
+	// 	Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
+	// 	XhatInv := Xhat.Clone().Neg(Xhat)
 
-		// Decrypt r.C to keyPointHat
-		XhatInv.Add(r.C[i], XhatInv)
-		keys[i], err = XhatInv.Data()
-		if err != nil {
-			err = xerrors.Errorf("extracting data from point: %v", err)
-		}
+	// 	// Decrypt r.C to keyPointHat
+	// 	XhatInv.Add(r.C[i], XhatInv)
+	// 	keys[i], err = XhatInv.Data()
+	// 	if err != nil {
+	// 		err = xerrors.Errorf("extracting data from point: %v", err)
+	// 	}
+	// }
+
+	jobChan := make(chan job, num)
+
+	for i := 0; i < num; i++ {
+		jobChan <- job{index: i}
 	}
+	close(jobChan)
+
+	//workers
+	for i := 0; i < 128; i++ {
+		wg.Add(1)
+		go worker(jobChan, xc, keys, r)
+	}
+
+	wg.Wait()
+
 	return
 }
