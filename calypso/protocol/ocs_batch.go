@@ -88,7 +88,7 @@ func (o *OCSBatch) Start() error {
 	// 		return xerrors.New("refused to reencrypt")
 	// 	}
 	// }
-	o.timeout = time.AfterFunc(5*time.Minute, func() {
+	o.timeout = time.AfterFunc(50*time.Minute, func() {
 		log.Lvl1("OCS protocol timeout")
 		o.finish(false)
 	})
@@ -103,7 +103,7 @@ func (o *OCSBatch) Start() error {
 // Reencrypt is received by every node to give his part of
 // the share
 func (o *OCSBatch) reencryptBatch(r structReencryptBatch) error {
-	log.Lvl3(o.Name() + ": starting reencrypt")
+	log.Lvl1(o.Name() + ": starting reencrypt")
 	defer o.Done()
 
 	num := len(r.U)
@@ -158,10 +158,13 @@ func (o *OCSBatch) reencryptBatchReply(rr structReencryptBatchReply) error {
 	}
 	o.replies = append(o.replies, rr.ReencryptBatchReply)
 
+	//log.Lvl1(len(o.replies))
+
 	// minus one to exclude the root
 	if len(o.replies) >= int(o.Threshold-1) {
 		num := len(o.replies[0].Fi)
 		for i := 0; i < num; i++ {
+			log.Lvl1("working on transaction", i)
 			o.Uis[i] = make([]*share.PubShare, len(o.List()))
 			o.Uis[i][0] = o.getUI(o.U[i], o.Xc[i])
 

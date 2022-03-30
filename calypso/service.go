@@ -714,7 +714,7 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 		s.storage.Unlock()
 	}
 
-	log.Lvl2("Starting reencryption protocol")
+	log.Lvl1("Starting reencryption protocol")
 	err = ocsProto.SetConfig(&onet.GenericConfig{Data: id.Slice()})
 	if err != nil {
 		return nil,
@@ -727,7 +727,7 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 	if !<-ocsProto.Reencrypted {
 		return nil, xerrors.New("reencryption got refused")
 	}
-	log.Lvl2("Reencryption protocol is done.")
+	log.Lvl1("Reencryption protocol is done.")
 
 	for idx, uis := range ocsProto.Uis {
 		xhatEnc, err := share.RecoverCommit(cothority.Suite, uis, threshold, nodes)
