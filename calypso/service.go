@@ -633,9 +633,10 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 	num := len(dkr.Write)
 	write := make([]Write, num)
 	reply = &DecryptKeyBatchReply{}
-	reply.C = make([]kyber.Point, num)
-	reply.X = make([]kyber.Point, num)
-	reply.XhatEnc = make([]kyber.Point, num)
+	// reply.C = make([]kyber.Point, num)
+	// reply.X = make([]kyber.Point, num)
+	// reply.XhatEnc = make([]kyber.Point, num)
+	reply.Keys = make([][]byte, num)
 
 	// var read Read
 	// if err := dkr.Read.VerifyAndDecode(cothority.Suite, ContractReadID, &read); err != nil {
@@ -705,7 +706,7 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 		s.storage.Lock()
 		ocsProto.Shared = s.storage.Shared[id]
 		pp := s.storage.Polys[id]
-		reply.X[i] = s.storage.Shared[id].X.Clone()
+		//reply.X[i] = s.storage.Shared[id].X.Clone()
 		var commits []kyber.Point
 		for _, c := range pp.Commits {
 			commits = append(commits, c.Clone())
@@ -734,9 +735,14 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 		if err != nil {
 			log.Errorf("Failed to recover commit %d: %v", idx, err)
 		} else {
-			reply.XhatEnc[idx] = xhatEnc
+			//reply.XhatEnc[idx] = xhatEnc
+
+			XhatInv := xhatEnc.Clone().Neg(xhatEnc)
+			// Decrypt r.C to keyPointHat
+			XhatInv.Add(write[idx].C, XhatInv)
+			reply.Keys[idx], _ = XhatInv.Data()
 		}
-		reply.C[idx] = write[idx].C
+		//reply.C[idx] = write[idx].C
 	}
 
 	// reply.XhatEnc, err = share.RecoverCommit(cothority.Suite, ocsProto.Uis,

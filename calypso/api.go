@@ -2,7 +2,6 @@ package calypso
 
 import (
 	"encoding/binary"
-	"sync"
 	"time"
 
 	"go.dedis.ch/kyber/v3/sign/schnorr"
@@ -370,61 +369,62 @@ type job struct {
 	index int
 }
 
-var wg sync.WaitGroup
+// var wg sync.WaitGroup
 
-func worker(jobChan <-chan job, xc kyber.Scalar, keys [][]byte, r *DecryptKeyBatchReply) {
-	defer wg.Done()
-	for j := range jobChan {
-		process(j, xc, keys, r)
-	}
-}
+// func worker(jobChan <-chan job, xc kyber.Scalar, keys [][]byte, r *DecryptKeyBatchReply) {
+// 	defer wg.Done()
+// 	for j := range jobChan {
+// 		process(j, xc, keys, r)
+// 	}
+// }
 
-func process(j job, xc kyber.Scalar, keys [][]byte, r *DecryptKeyBatchReply) {
-	i := j.index
-	xcInv := xc.Clone().Neg(xc)
-	XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
-	Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
-	XhatInv := Xhat.Clone().Neg(Xhat)
+// func process(j job, xc kyber.Scalar, keys [][]byte, r *DecryptKeyBatchReply) {
+// 	i := j.index
+// 	// xcInv := xc.Clone().Neg(xc)
+// 	// XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
+// 	// Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
+// 	// XhatInv := Xhat.Clone().Neg(Xhat)
 
-	// Decrypt r.C to keyPointHat
-	XhatInv.Add(r.C[i], XhatInv)
-	keys[i], _ = XhatInv.Data()
-	// if err != nil {
-	// 	err = xerrors.Errorf("extracting data from point: %v", err)
-	// }
-}
+// 	XhatInv := r.XhatEnc[i].Clone().Neg(r.XhatEnc[i])
+// 	// Decrypt r.C to keyPointHat
+// 	XhatInv.Add(r.C[i], XhatInv)
+// 	keys[i], _ = XhatInv.Data()
+// 	// if err != nil {
+// 	// 	err = xerrors.Errorf("extracting data from point: %v", err)
+// 	// }
+// }
 
-func (r *DecryptKeyBatchReply) RecoverKey(xc kyber.Scalar) (keys [][]byte, err error) {
-	num := len(r.XhatEnc)
-	keys = make([][]byte, num)
-	// for i := 0; i < num; i++ {
-	// 	xcInv := xc.Clone().Neg(xc)
-	// 	XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
-	// 	Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
-	// 	XhatInv := Xhat.Clone().Neg(Xhat)
+// func (r *DecryptKeyBatchReply) RecoverKey(xc kyber.Scalar) (keys [][]byte, err error) {
+// 	num := len(r.XhatEnc)
+// 	keys = make([][]byte, num)
+// 	// for i := 0; i < num; i++ {
+// 	// 	xcInv := xc.Clone().Neg(xc)
+// 	// 	XhatDec := r.X[i].Clone().Mul(xcInv, r.X[i])
+// 	// 	Xhat := XhatDec.Clone().Add(r.XhatEnc[i], XhatDec)
+// 	// 	XhatInv := Xhat.Clone().Neg(Xhat)
 
-	// 	// Decrypt r.C to keyPointHat
-	// 	XhatInv.Add(r.C[i], XhatInv)
-	// 	keys[i], err = XhatInv.Data()
-	// 	if err != nil {
-	// 		err = xerrors.Errorf("extracting data from point: %v", err)
-	// 	}
-	// }
+// 	// 	// Decrypt r.C to keyPointHat
+// 	// 	XhatInv.Add(r.C[i], XhatInv)
+// 	// 	keys[i], err = XhatInv.Data()
+// 	// 	if err != nil {
+// 	// 		err = xerrors.Errorf("extracting data from point: %v", err)
+// 	// 	}
+// 	// }
 
-	jobChan := make(chan job, num)
+// 	jobChan := make(chan job, num)
 
-	for i := 0; i < num; i++ {
-		jobChan <- job{index: i}
-	}
-	close(jobChan)
+// 	for i := 0; i < num; i++ {
+// 		jobChan <- job{index: i}
+// 	}
+// 	close(jobChan)
 
-	//workers
-	for i := 0; i < 128; i++ {
-		wg.Add(1)
-		go worker(jobChan, xc, keys, r)
-	}
+// 	//workers
+// 	for i := 0; i < 128; i++ {
+// 		wg.Add(1)
+// 		go worker(jobChan, xc, keys, r)
+// 	}
 
-	wg.Wait()
+// 	wg.Wait()
 
-	return
-}
+// 	return
+// }

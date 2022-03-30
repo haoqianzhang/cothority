@@ -151,7 +151,12 @@ func (o *OCSBatch) reencryptBatch(r structReencryptBatch) error {
 	fi := make([]kyber.Scalar, num)
 
 	for i := 0; i < num; i++ {
-		ui[i] = o.getUI(r.U[i], r.Xc[i])
+		//ui[i] = o.getUI(r.U[i], r.Xc[i])
+
+		ui[i] = &share.PubShare{
+			I: o.Shared.Index,
+			V: cothority.Suite.Point().Mul(o.Shared.V, r.U[i]),
+		}
 
 		// if o.Verify != nil {
 		// 	if !o.Verify(&r.ReencryptBatch) {
@@ -163,7 +168,7 @@ func (o *OCSBatch) reencryptBatch(r structReencryptBatch) error {
 
 		// Calculating proofs
 		si := cothority.Suite.Scalar().Pick(o.Suite().RandomStream())
-		uiHat := cothority.Suite.Point().Mul(si, cothority.Suite.Point().Add(r.U[i], r.Xc[i]))
+		uiHat := cothority.Suite.Point().Mul(si, r.U[i])
 		hiHat := cothority.Suite.Point().Mul(si, nil)
 		hash := sha256.New()
 		ui[i].V.MarshalTo(hash)
@@ -208,12 +213,15 @@ func processBatchReply(j job, o *OCSBatch) {
 	i := j.index
 	log.Lvl1("working on transaction", i)
 	o.Uis[i] = make([]*share.PubShare, len(o.List()))
-	o.Uis[i][0] = o.getUI(o.U[i], o.Xc[i])
+	o.Uis[i][0] = &share.PubShare{
+		I: o.Shared.Index,
+		V: cothority.Suite.Point().Mul(o.Shared.V, o.U[i]),
+	}
 
 	for _, r := range o.replies {
 
 		// Verify proofs
-		ufi := cothority.Suite.Point().Mul(r.Fi[i], cothority.Suite.Point().Add(o.U[i], o.Xc[i]))
+		ufi := cothority.Suite.Point().Mul(r.Fi[i], o.U[i])
 		uiei := cothority.Suite.Point().Mul(cothority.Suite.Scalar().Neg(r.Ei[i]), r.Ui[i].V)
 		uiHat := cothority.Suite.Point().Add(ufi, uiei)
 

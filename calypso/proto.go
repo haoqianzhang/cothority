@@ -152,11 +152,12 @@ type DecryptKeyReply struct {
 
 type DecryptKeyBatchReply struct {
 	// C is the secret re-encrypted under the reader's public key.
-	C []kyber.Point
+	// C []kyber.Point
 	// XhatEnc is the random part of the encryption.
-	XhatEnc []kyber.Point
+	// XhatEnc []kyber.Point
 	// X is the aggregate public key of the LTS used.
-	X []kyber.Point
+	// X []kyber.Point
+	Keys [][]byte
 }
 
 // GetLTSReply asks for the shared public key of the corresponding LTSID
