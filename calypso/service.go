@@ -748,7 +748,6 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 	}
 	close(jobChan)
 
-	//workers
 	numWorkers := 128
 	if num < numWorkers {
 		numWorkers = num
