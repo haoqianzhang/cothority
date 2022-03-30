@@ -273,8 +273,12 @@ func (o *OCSBatch) reencryptBatchReply(rr structReencryptBatchReply) error {
 	}
 	close(jobChan)
 
-	//workers
-	for i := 0; i < 128; i++ {
+	numWorkers := 128
+	if num < numWorkers {
+		numWorkers = num
+	}
+
+	for i := 0; i < numWorkers; i++ {
 		wgBatchReply.Add(1)
 		go workerBatchReply(jobChan, o)
 	}

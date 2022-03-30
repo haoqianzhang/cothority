@@ -559,11 +559,11 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	// 		"read proof cannot be verified to come from scID: %v",
 	// 		err)
 	// }
-	if err = s.verifyProof(&dkr.Write); err != nil {
-		return nil, xerrors.Errorf(
-			"write proof cannot be verified to come from scID: %v",
-			err)
-	}
+	// if err = s.verifyProof(&dkr.Write); err != nil {
+	// 	return nil, xerrors.Errorf(
+	// 		"write proof cannot be verified to come from scID: %v",
+	// 		err)
+	// }
 
 	// Start ocs-protocol to re-encrypt the file's symmetric key under the
 	// reader's public key.
@@ -581,7 +581,7 @@ func (s *Service) DecryptKey(dkr *DecryptKey) (reply *DecryptKeyReply, err error
 	// }
 	//ocsProto.Xc = read.Xc
 	ocsProto.Xc = dkr.ReadKey
-	log.Lvlf2("%v Public key is: %s", s.ServerIdentity(), ocsProto.Xc)
+	log.Lvlf1("%v Public key is: %s", s.ServerIdentity(), ocsProto.Xc)
 	// ocsProto.VerificationData, err = protobuf.Encode(verificationData)
 	// if err != nil {
 	// 	return nil,
@@ -665,11 +665,11 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 		// 		"read proof cannot be verified to come from scID: %v",
 		// 		err)
 		// }
-		if err = s.verifyProof(&dkr.Write[i]); err != nil {
-			return nil, xerrors.Errorf(
-				"write proof cannot be verified to come from scID: %v",
-				err)
-		}
+		// if err = s.verifyProof(&dkr.Write[i]); err != nil {
+		// 	return nil, xerrors.Errorf(
+		// 		"write proof cannot be verified to come from scID: %v",
+		// 		err)
+		// }
 	}
 
 	// Start ocs-protocol to re-encrypt the file's symmetric key under the
@@ -730,29 +730,65 @@ func (s *Service) DecryptKeyBatch(dkr *DecryptKeyBatch) (reply *DecryptKeyBatchR
 	}
 	log.Lvl1("Reencryption protocol is done.")
 
-	for idx, uis := range ocsProto.Uis {
-		xhatEnc, err := share.RecoverCommit(cothority.Suite, uis, threshold, nodes)
-		if err != nil {
-			log.Errorf("Failed to recover commit %d: %v", idx, err)
-		} else {
-			//reply.XhatEnc[idx] = xhatEnc
+	// for idx, uis := range ocsProto.Uis {
+	// 	xhatEnc, err := share.RecoverCommit(cothority.Suite, uis, threshold, nodes)
+	// 	if err != nil {
+	// 		log.Errorf("Failed to recover commit %d: %v", idx, err)
+	// 	} else {
+	// 		XhatInv := xhatEnc.Clone().Neg(xhatEnc)
+	// 		XhatInv.Add(write[idx].C, XhatInv)
+	// 		reply.Keys[idx], _ = XhatInv.Data()
+	// 	}
+	// }
 
-			XhatInv := xhatEnc.Clone().Neg(xhatEnc)
-			// Decrypt r.C to keyPointHat
-			XhatInv.Add(write[idx].C, XhatInv)
-			reply.Keys[idx], _ = XhatInv.Data()
-		}
-		//reply.C[idx] = write[idx].C
+	jobChan := make(chan job, num)
+
+	for i := 0; i < num; i++ {
+		jobChan <- job{index: i}
+	}
+	close(jobChan)
+
+	//workers
+	numWorkers := 128
+	if num < numWorkers {
+		numWorkers = num
 	}
 
-	// reply.XhatEnc, err = share.RecoverCommit(cothority.Suite, ocsProto.Uis,
-	// 	threshold, nodes)
-	// if err != nil {
-	// 	return nil, xerrors.Errorf("failed to recover commit: %v", err)
-	// }
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(jobChan, ocsProto, threshold, nodes, write, reply)
+	}
+
+	wg.Wait()
+
 	log.Lvl2("Successfully reencrypted the key")
 	return
 }
+
+func process(j job, ocsProto *protocol.OCSBatch, threshold int, nodes int, write []Write, reply *DecryptKeyBatchReply) {
+	idx := j.index
+	xhatEnc, err := share.RecoverCommit(cothority.Suite, ocsProto.Uis[idx], threshold, nodes)
+	if err != nil {
+		log.Errorf("Failed to recover commit %d: %v", idx, err)
+	} else {
+		XhatInv := xhatEnc.Clone().Neg(xhatEnc)
+		XhatInv.Add(write[idx].C, XhatInv)
+		reply.Keys[idx], _ = XhatInv.Data()
+	}
+}
+
+func worker(jobChan <-chan job, ocsProto *protocol.OCSBatch, threshold int, nodes int, write []Write, reply *DecryptKeyBatchReply) {
+	defer wg.Done()
+	for j := range jobChan {
+		process(j, ocsProto, threshold, nodes, write, reply)
+	}
+}
+
+type job struct {
+	index int
+}
+
+var wg sync.WaitGroup
 
 // GetLTSReply returns the CreateLTSReply message of a previous LTS.
 func (s *Service) GetLTSReply(req *GetLTSReply) (*CreateLTSReply, error) {

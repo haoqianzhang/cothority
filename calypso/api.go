@@ -365,9 +365,9 @@ func (r *DecryptKeyReply) RecoverKey(xc kyber.Scalar) (key []byte, err error) {
 	return
 }
 
-type job struct {
-	index int
-}
+// type job struct {
+// 	index int
+// }
 
 // var wg sync.WaitGroup
 
